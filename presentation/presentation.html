@@ -24,12 +24,12 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#/slide-orgc268f30">Intro</a></li>
-<li><a href="#/slide-org6e29f45">My Naive Approach</a></li>
-<li><a href="#/slide-org5e35389">GADTs to the Rescue</a></li>
-<li><a href="#/slide-org4633368">Tagless "Final"</a></li>
-<li><a href="#/slide-org1940a09">Discussion</a></li>
-<li><a href="#/slide-org22bcaba">References</a></li>
+<li><a href="#/slide-orgbf3b922">Intro</a></li>
+<li><a href="#/slide-org4cf6455">My Naive Approach</a></li>
+<li><a href="#/slide-org089dbc9">GADTs to the Rescue</a></li>
+<li><a href="#/slide-org0c03185">Tagless "Final"</a></li>
+<li><a href="#/slide-org5e36144">Discussion</a></li>
+<li><a href="#/slide-orgb7eb483">References</a></li>
 </ul>
 </div>
 </div>
@@ -37,8 +37,8 @@
 
 
 <section>
-<section id="slide-orgc268f30">
-<h2 id="orgc268f30">Intro</h2>
+<section id="slide-orgbf3b922">
+<h2 id="orgbf3b922">Intro</h2>
 <aside class="notes">
 <p>
 I was trying to implement a 311-style interpreter, this time in Haskell intead of Racket (which is untyped, or unityped). Very soon I found out there was a lot of hoops to jump through when it comes down to a typed language. I was not satisfied with my naive implementation and trying to improve my AST representation. Then I found Oleg's tutorial on so called "Typed Tagless Final" and learned some interesting techniques. Todays I want to share with you what I learned.
@@ -47,8 +47,8 @@ I was trying to implement a 311-style interpreter, this time in Haskell intead o
 </aside>
 
 </section>
-<section id="slide-orge113c18">
-<h3 id="orge113c18">What do I mean by a "311-style interpreter"?</h3>
+<section id="slide-org513b67c">
+<h3 id="org513b67c">What do I mean by a "311-style interpreter"?</h3>
 <ul>
 <li>Some object/source language :
 <ul>
@@ -68,8 +68,8 @@ Haskell (or other <b>TYPED</b> functional languages)
 </ul>
 
 </section>
-<section id="slide-orgac1ebff">
-<h3 id="orgac1ebff">Something looks like:</h3>
+<section id="slide-orgf314034">
+<h3 id="orgf314034">Something looks like:</h3>
 <aside class="notes">
 <p>
 This would be a direct translation from the Racket version
@@ -99,8 +99,8 @@ Does this work?
 </section>
 </section>
 <section>
-<section id="slide-org6e29f45">
-<h2 id="org6e29f45">My Naive Approach</h2>
+<section id="slide-org4cf6455">
+<h2 id="org4cf6455">My Naive Approach</h2>
 <aside class="notes">
 <p>
 Unimportant differences:
@@ -147,12 +147,12 @@ Important:
 </div>
 
 </section>
-<section id="slide-org007fdf7">
-<h3 id="org007fdf7">Show <code>LC0.hs</code></h3>
+<section id="slide-orgd44fd40">
+<h3 id="orgd44fd40">Show <code>LC0.hs</code></h3>
 
 </section>
-<section id="slide-orgd411e81">
-<h3 id="orgd411e81">Problems:</h3>
+<section id="slide-orgd49bc09">
+<h3 id="orgd49bc09">Problems:</h3>
 <ol>
 <li>Boilerplate</li>
 
@@ -179,14 +179,14 @@ Run-time overhead around <b>"tags"</b>
 </p>
 
 </section>
-<section id="slide-orge9e5d42">
-<h3 id="orge9e5d42">Q: How would you improve the AST?</h3>
+<section id="slide-orgd52becc">
+<h3 id="orgd52becc">Q: How would you improve the AST?</h3>
 
 </section>
 </section>
 <section>
-<section id="slide-org5e35389">
-<h2 id="org5e35389">GADTs to the Rescue</h2>
+<section id="slide-org089dbc9">
+<h2 id="org089dbc9">GADTs to the Rescue</h2>
 <p>
 <b>Main idea</b>: allow a type veriable to be specified by constructors
 </p>
@@ -213,18 +213,18 @@ Now <code>Exp t</code> defines a family of types, and <code>eval</code> can retu
 </p>
 
 </section>
-<section id="slide-orgdc5de68">
-<h3 id="orgdc5de68">Show real code</h3>
+<section id="slide-org5b5bb05">
+<h3 id="org5b5bb05">Show real code</h3>
 
 </section>
-<section id="slide-orge5f3a7f">
-<h3 id="orge5f3a7f">Nicely tagless! But do we have something simpler?</h3>
+<section id="slide-org734ce6f">
+<h3 id="org734ce6f">Nicely tagless! But do we have something simpler?</h3>
 
 </section>
 </section>
 <section>
-<section id="slide-org4633368">
-<h2 id="org4633368">Tagless "Final"</h2>
+<section id="slide-org0c03185">
+<h2 id="org0c03185">Tagless "Final"</h2>
 <p>
 Main idea: using <b>typeclasses</b> instead of ADTs
 </p>
@@ -245,8 +245,8 @@ the previous ADT method is called "initial embedding", the concept related to in
 </aside>
 
 </section>
-<section id="slide-org3805e16">
-<h3 id="org3805e16">First, let's look at a trivial example</h3>
+<section id="slide-org82dde66">
+<h3 id="org82dde66">First, let's look at a trivial example</h3>
 <div class="org-src-container">
 
 <pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">data</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">=</span> <span style="color: #228b22;">Lit</span> <span style="color: #228b22;">Int</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">Neg</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">Add</span> <span style="color: #228b22;">Exp</span> <span style="color: #228b22;">Exp</span>
@@ -269,8 +269,8 @@ the previous ADT method is called "initial embedding", the concept related to in
 </div>
 
 </section>
-<section id="slide-orgb473852">
-<h3 id="orgb473852">Factoring out the common interface:</h3>
+<section id="slide-org4bd6d4b">
+<h3 id="org4bd6d4b">Factoring out the common interface:</h3>
 <p>
 <code>Exp -&gt; X</code>, for some <code>X</code>
 </p>
@@ -290,8 +290,8 @@ the previous ADT method is called "initial embedding", the concept related to in
 </div>
 
 </section>
-<section id="slide-org6bc4ebf">
-<h3 id="org6bc4ebf">Evaluation/Pretty Print as <b>Instances</b></h3>
+<section id="slide-org9ca31d0">
+<h3 id="org9ca31d0">Evaluation/Pretty Print as <b>Instances</b></h3>
 <div class="org-src-container">
 
 <pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">class</span> <span style="color: #228b22;">SymAdd</span> repr <span style="color: #a020f0;">where</span>
@@ -310,12 +310,12 @@ the previous ADT method is called "initial embedding", the concept related to in
 </div>
 
 </section>
-<section id="slide-orge6867d9">
-<h3 id="orge6867d9">Show <code>TFIntro.hs</code></h3>
+<section id="slide-org3ab3484">
+<h3 id="org3ab3484">Show <code>TFIntro.hs</code></h3>
 
 </section>
-<section id="slide-org48a8903">
-<h3 id="org48a8903">Move on to the interesting case</h3>
+<section id="slide-org035a890">
+<h3 id="org035a890">Move on to the interesting case</h3>
 <div class="org-src-container">
 
 <pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">class</span> <span style="color: #228b22;">Symantics</span> repr <span style="color: #a020f0;">where</span>
@@ -334,15 +334,15 @@ the previous ADT method is called "initial embedding", the concept related to in
 </p>
 
 </section>
-<section id="slide-orgbe0aff1">
-<h3 id="orgbe0aff1">Exercise:</h3>
+<section id="slide-orgfcbab00">
+<h3 id="orgfcbab00">Exercise:</h3>
 <p>
 Simplify the typeclass definition so <code>repr</code> does not need to keep track of the type of the environment (hint: using HOAS) 
 </p>
 
 </section>
-<section id="slide-org203db73">
-<h3 id="org203db73">Connection between inital and final embedding</h3>
+<section id="slide-org913ef4d">
+<h3 id="org913ef4d">Connection between inital and final embedding</h3>
 <p>
 <b>Caveat</b>: "final" here is not in the sense of category theory!
 </p>
@@ -356,20 +356,20 @@ More discussion on this: <a href="https://cstheory.stackexchange.com/questions/4
 </section>
 </section>
 <section>
-<section id="slide-org1940a09">
-<h2 id="org1940a09">Discussion</h2>
-<div class="outline-text-2" id="text-org1940a09">
+<section id="slide-org5e36144">
+<h2 id="org5e36144">Discussion</h2>
+<div class="outline-text-2" id="text-org5e36144">
 </div>
 </section>
-<section id="slide-org8b0a5c9">
-<h3 id="org8b0a5c9">Extensibility ~ Modularity</h3>
+<section id="slide-org9eda155">
+<h3 id="org9eda155">Extensibility ~ Modularity</h3>
 <p>
 Using constraints as (mini) modules <br />
 &#x2013; a common theme of haskell <code>mtl</code> library
 </p>
 
 </section>
-<section id="slide-org8b0a5c9-split">
+<section id="slide-org9eda155-split">
 <p>
 incremental development:
 </p>
@@ -390,8 +390,8 @@ Q: What are the limitations of the final approach?
 </p>
 
 </section>
-<section id="slide-orga0e1191">
-<h3 id="orga0e1191">Compare with free monads</h3>
+<section id="slide-org0ae8dcb">
+<h3 id="org0ae8dcb">Compare with free monads</h3>
 <p>
 Free monads are still initial structure
 </p>
@@ -401,33 +401,50 @@ There is a way to combine these two and make a "final" free monads
 </p>
 
 </section>
-<section id="slide-org13aafe7">
-<h3 id="org13aafe7">Compare with Datatypes a la Carte</h3>
+<section id="slide-org476d1ec">
+<h3 id="org476d1ec">Compare with Datatypes a la Carte</h3>
 <p>
 <code>data In f = In (f (In f))</code> this construction does not apply to 
 </p>
 
 </section>
-<section id="slide-org4914087">
-<h3 id="org4914087">Semantics</h3>
+<section id="slide-org2941bfa">
+<h3 id="org2941bfa">Semantics</h3>
 <ul>
-<li>System F</li>
-<li>Yoneda?</li>
+<li>System F?</li>
+<li><p>
+coYoneda embedding?
+</p>
+
+<p>
+<code>J : C^op -&gt; [C , SET]</code>
+</p>
+
+<p>
+<code>c |-&gt; Hom(c,-)</code>
+</p></li>
 
 </ul>
 
 </section>
 </section>
 <section>
-<section id="slide-org22bcaba">
-<h2 id="org22bcaba">References</h2>
+<section id="slide-orgb7eb483">
+<h2 id="orgb7eb483">References</h2>
 <p>
-Oleg's tutorial <a href="https://okmij.org/ftp/tagless-final/course/lecture.pdf">https://okmij.org/ftp/tagless-final/course/lecture.pdf</a>
+Oleg's tutorial
+</p>
+
+<p>
+<a href="https://okmij.org/ftp/tagless-final/course/lecture.pdf">https://okmij.org/ftp/tagless-final/course/lecture.pdf</a>
 </p>
 
 <p>
 "Finally Tagless, Partially Evaluated"
 Jacques Carette, Oleg Kiselyov and Chung-chieh Shan
+</p>
+
+<p>
 <a href="https://okmij.org/ftp/tagless-final/JFP.pdf">https://okmij.org/ftp/tagless-final/JFP.pdf</a>
 </p>
 </section>

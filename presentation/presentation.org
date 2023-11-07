@@ -230,11 +230,6 @@ class Symantics repr where
 
 Simplify the typeclass definition so ~repr~ does not need to keep track of the type of the environment (hint: using HOAS) 
 
-** Connection between inital and final embedding
-*Caveat*: "final" here is not in the sense of category theory!
-
-More discussion on this: [[https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in][link]]
-
 
 
 * Discussion
@@ -265,14 +260,29 @@ There is a way to combine these two and make a "final" free monads
 ** Compare with Datatypes a la Carte
 ~data In f = In (f (In f))~ this construction does not apply to 
 
+** Connection between inital and final embedding
+
+Isomorphism
+
+"final" here is not in the sense of category theory!
+
+More discussion on this: [[https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in][link]]
+
 ** Semantics
-- System F
-- Yoneda?
+- System F?
+- coYoneda embedding?
+  
+  ~J : C^op -> [C , SET]~
+
+  ~c |-> Hom(c,-)~
 
 * References
 
-Oleg's tutorial https://okmij.org/ftp/tagless-final/course/lecture.pdf
+Oleg's tutorial
+
+https://okmij.org/ftp/tagless-final/course/lecture.pdf
 
 "Finally Tagless, Partially Evaluated"
 Jacques Carette, Oleg Kiselyov and Chung-chieh Shan
+
 https://okmij.org/ftp/tagless-final/JFP.pdf
