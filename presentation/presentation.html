@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Tagless Embeddings</title>
+<meta name="author" content="Zixiu Su"/>
+<meta name="description" content=""/>
+<meta name="keywords" content=""/>
+<style type="text/css">
+.underline { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js/dist/reveal.css"/>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js/dist/theme/serif.css" id="theme"/>
+
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+<section id="sec-title-slide"><h1 class="title">Tagless Embeddings</h1><p class="subtitle">initial vs. final</p>
+<h2 class="author">Zixiu Su</h2><h2 class="date">2023-11-05</h2>
+</section>
+<section id="sec-table-of-contents"><div id="table-of-contents" role="doc-toc">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents" role="doc-toc">
+<ul>
+<li><a href="#/slide-orgc268f30">Intro</a></li>
+<li><a href="#/slide-org6e29f45">My Naive Approach</a></li>
+<li><a href="#/slide-org5e35389">GADTs to the Rescue</a></li>
+<li><a href="#/slide-org4633368">Tagless "Final"</a></li>
+<li><a href="#/slide-org1940a09">Discussion</a></li>
+<li><a href="#/slide-org22bcaba">References</a></li>
+</ul>
+</div>
+</div>
+</section>
+
+
+<section>
+<section id="slide-orgc268f30">
+<h2 id="orgc268f30">Intro</h2>
+<aside class="notes">
+<p>
+I was trying to implement a 311-style interpreter, this time in Haskell intead of Racket (which is untyped, or unityped). Very soon I found out there was a lot of hoops to jump through when it comes down to a typed language. I was not satisfied with my naive implementation and trying to improve my AST representation. Then I found Oleg's tutorial on so called "Typed Tagless Final" and learned some interesting techniques. Todays I want to share with you what I learned.
+</p>
+
+</aside>
+
+</section>
+<section id="slide-orge113c18">
+<h3 id="orge113c18">What do I mean by a "311-style interpreter"?</h3>
+<ul>
+<li>Some object/source language :
+<ul>
+<li>Simply typed lambda calculus (STLC)</li>
+<li>extended with Bool/Int/&#x2026;</li>
+
+</ul></li>
+
+<li><p>
+Implemented in:
+</p>
+
+<p>
+Haskell (or other <b>TYPED</b> functional languages)
+</p></li>
+
+</ul>
+
+</section>
+<section id="slide-orgac1ebff">
+<h3 id="orgac1ebff">Something looks like:</h3>
+<aside class="notes">
+<p>
+This would be a direct translation from the Racket version
+</p>
+
+<p>
+Ask if this works? Take a guess?
+</p>
+
+</aside>
+
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">data</span> <span style="color: #228b22;">Var</span> <span style="color: #a0522d;">=</span> <span style="color: #228b22;">VS</span> <span style="color: #228b22;">Var</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">V0</span>
+<span style="color: #a020f0;">data</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">=</span> <span style="color: #228b22;">B</span> <span style="color: #228b22;">Bool</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">V</span> <span style="color: #228b22;">Var</span>   <span style="color: #a0522d;">|</span> <span style="color: #228b22;">L</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">A</span> <span style="color: #228b22;">Exp</span> <span style="color: #228b22;">Exp</span>
+        <span style="color: #b22222;">-- </span><span style="color: #b22222;">boolean  variable  lambda  application</span>
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">B</span> b)     <span style="color: #a020f0;">_</span>   <span style="color: #a0522d;">=</span> b
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">V</span> var)   env <span style="color: #a0522d;">=</span> lookp var env
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">L</span> body)  env <span style="color: #a0522d;">=</span> <span style="color: #a0522d;">\</span>arg <span style="color: #a0522d;">-&gt;</span> interp body (arg, env)
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">A</span> f a)   env <span style="color: #a0522d;">=</span> (interp f env) (interp a env)
+</code></pre>
+</div>
+<p>
+Does this work?
+</p>
+
+</section>
+</section>
+<section>
+<section id="slide-org6e29f45">
+<h2 id="org6e29f45">My Naive Approach</h2>
+<aside class="notes">
+<p>
+Unimportant differences:
+</p>
+
+<ul>
+<li>Int vs Bool</li>
+
+<li>named vs debruijned</li>
+
+</ul>
+
+<p>
+Important:
+</p>
+
+<ul>
+<li>explain GADTs syntax (data Exp where..)</li>
+
+<li>use Data.Map as env</li>
+
+<li>union type for values</li>
+
+</ul>
+
+</aside>
+
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #0000ff;">interp</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Env</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Maybe</span> <span style="color: #228b22;">Val</span>
+
+<span style="color: #a020f0;">type</span> <span style="color: #228b22;">Env</span> <span style="color: #a0522d;">=</span> <span style="color: #228b22;">M.Map</span> <span style="color: #228b22;">String</span> <span style="color: #228b22;">Val</span>
+
+<span style="color: #a020f0;">data</span> <span style="color: #228b22;">Exp</span> <span style="color: #a020f0;">where</span>
+  <span style="color: #228b22;">Int</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Integer</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span>
+  <span style="color: #228b22;">Var</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">String</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span>
+  <span style="color: #228b22;">Lam</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">String</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span>
+  <span style="color: #228b22;">App</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span>
+
+<span style="color: #a020f0;">data</span> <span style="color: #228b22;">Val</span> <span style="color: #a020f0;">where</span>
+  <span style="color: #228b22;">VInt</span>  <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Integer</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Val</span>
+  <span style="color: #228b22;">VClos</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">String</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Env</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Val</span>
+</code></pre>
+</div>
+
+</section>
+<section id="slide-org007fdf7">
+<h3 id="org007fdf7">Show <code>LC0.hs</code></h3>
+
+</section>
+<section id="slide-orgd411e81">
+<h3 id="orgd411e81">Problems:</h3>
+<ol>
+<li>Boilerplate</li>
+
+<li><p>
+AST allowing ill-typed programs (example?)
+</p>
+
+<p>
+=&gt; write a type checker?
+</p></li>
+
+<li><p>
+Packing/unpacking union type values
+</p>
+
+<p>
+Run-time overhead around <b>"tags"</b>
+</p></li>
+
+</ol>
+
+<p>
+<b>Cause</b>: DSL embedding is "loose", Haskell type system can't help 
+</p>
+
+</section>
+<section id="slide-orge9e5d42">
+<h3 id="orge9e5d42">Q: How would you improve the AST?</h3>
+
+</section>
+</section>
+<section>
+<section id="slide-org5e35389">
+<h2 id="org5e35389">GADTs to the Rescue</h2>
+<p>
+<b>Main idea</b>: allow a type veriable to be specified by constructors
+</p>
+
+<p>
+Now <code>Exp t</code> defines a family of types, and <code>eval</code> can return different value types based on the type of <code>t</code>
+</p>
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #483d8b;">{-# LANGUAGE GADTs #-}</span>
+<span style="color: #b22222;">-- </span><span style="color: #b22222;">adding a extra parameter to achieve finer control</span>
+<span style="color: #a020f0;">data</span> <span style="color: #228b22;">Exp</span> t <span style="color: #a020f0;">where</span>
+  int  <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Int</span>  <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> <span style="color: #228b22;">Int</span>  <span style="color: #b22222;">-- </span><span style="color: #b22222;">reflecting underlying value</span>
+  bool <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Bool</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> <span style="color: #228b22;">Bool</span>
+  lam <span style="color: #a0522d;">::</span> (<span style="color: #228b22;">Exp</span> a <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> b) <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> (a<span style="color: #a0522d;">-&gt;</span>b)
+  app <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Exp</span> (a<span style="color: #a0522d;">-&gt;</span>b) <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> a <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Exp</span> b
+  <span style="color: #a0522d;">...</span>
+
+<span style="color: #0000ff;">eval</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Exp</span> t <span style="color: #a0522d;">-&gt;</span> t <span style="color: #b22222;">-- </span><span style="color: #b22222;">returns different value types</span>
+</code></pre>
+</div>
+<p>
+<b>Caveat</b>: this is a simplified version!
+</p>
+
+</section>
+<section id="slide-orgdc5de68">
+<h3 id="orgdc5de68">Show real code</h3>
+
+</section>
+<section id="slide-orge5f3a7f">
+<h3 id="orge5f3a7f">Nicely tagless! But do we have something simpler?</h3>
+
+</section>
+</section>
+<section>
+<section id="slide-org4633368">
+<h2 id="org4633368">Tagless "Final"</h2>
+<p>
+Main idea: using <b>typeclasses</b> instead of ADTs
+</p>
+
+<aside class="notes">
+<p>
+Explain the name:
+</p>
+
+<p>
+the previous ADT method is called "initial embedding", the concept related to initial algebra, that is each inductive type can be understood as an initial algebra of the underlying functor.
+</p>
+
+<p>
+"final" is not dual to "initial" in the common categroical sense, there is some duality, which I might talk about later.
+</p>
+
+</aside>
+
+</section>
+<section id="slide-org3805e16">
+<h3 id="org3805e16">First, let's look at a trivial example</h3>
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">data</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">=</span> <span style="color: #228b22;">Lit</span> <span style="color: #228b22;">Int</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">Neg</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">Add</span> <span style="color: #228b22;">Exp</span> <span style="color: #228b22;">Exp</span>
+
+<span style="color: #0000ff;">interp</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">Int</span>
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">Lit</span> x)   <span style="color: #a0522d;">=</span> x
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">Neg</span> x)   <span style="color: #a0522d;">=</span> <span style="color: #a0522d;">-</span>(interp x)
+<span style="color: #0000ff;">interp</span> (<span style="color: #228b22;">Add</span> x y) <span style="color: #a0522d;">=</span> interp x <span style="color: #a0522d;">+</span> interp y
+
+<span style="color: #0000ff;">pprint</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">-&gt;</span> <span style="color: #228b22;">String</span>
+<span style="color: #0000ff;">pprint</span> (<span style="color: #228b22;">Lit</span> x)   <span style="color: #a0522d;">=</span> show x
+<span style="color: #0000ff;">pprint</span> (<span style="color: #228b22;">Neg</span> x)   <span style="color: #a0522d;">=</span> <span style="color: #8b2252;">"-("</span> <span style="color: #a0522d;">++</span> pprint x <span style="color: #a0522d;">++</span> <span style="color: #8b2252;">")"</span>
+<span style="color: #0000ff;">pprint</span> (<span style="color: #228b22;">Add</span> x y) <span style="color: #a0522d;">=</span> <span style="color: #8b2252;">"("</span> <span style="color: #a0522d;">++</span> pprint x <span style="color: #a0522d;">++</span> <span style="color: #8b2252;">"+"</span> <span style="color: #a0522d;">++</span> pprint y <span style="color: #a0522d;">++</span> <span style="color: #8b2252;">")"</span>
+
+<span style="color: #b22222;">-- </span><span style="color: #b22222;">You might also want these:</span>
+<span style="color: #b22222;">-- </span><span style="color: #b22222;">parser    :: Exp -&gt; String -&gt; Maybe (String, Exp)</span>
+<span style="color: #b22222;">-- </span><span style="color: #b22222;">eq        :: Exp -&gt; Bool</span>
+<span style="color: #b22222;">-- </span><span style="color: #b22222;">typeCheck :: Exp -&gt; Either TypeError Exp</span>
+</code></pre>
+</div>
+
+</section>
+<section id="slide-orgb473852">
+<h3 id="orgb473852">Factoring out the common interface:</h3>
+<p>
+<code>Exp -&gt; X</code>, for some <code>X</code>
+</p>
+
+<p>
+<code>X</code> as an abstract type over concrete representations (Int,Bool,..)
+</p>
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">data</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">=</span> <span style="color: #228b22;">Lit</span> <span style="color: #228b22;">Int</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">Neg</span> <span style="color: #228b22;">Exp</span> <span style="color: #a0522d;">|</span> <span style="color: #228b22;">Add</span> <span style="color: #228b22;">Exp</span> <span style="color: #228b22;">Exp</span>
+<span style="color: #b22222;">-- </span><span style="color: #b22222;">translates to  </span>
+<span style="color: #a020f0;">class</span> <span style="color: #228b22;">SymAdd</span> repr <span style="color: #a020f0;">where</span>
+  lit <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Int</span> <span style="color: #a0522d;">-&gt;</span> repr
+  neg <span style="color: #a0522d;">::</span> repr <span style="color: #a0522d;">-&gt;</span> repr
+  add <span style="color: #a0522d;">::</span> repr <span style="color: #a0522d;">-&gt;</span> repr <span style="color: #a0522d;">-&gt;</span> repr
+</code></pre>
+</div>
+
+</section>
+<section id="slide-org6bc4ebf">
+<h3 id="org6bc4ebf">Evaluation/Pretty Print as <b>Instances</b></h3>
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">class</span> <span style="color: #228b22;">SymAdd</span> repr <span style="color: #a020f0;">where</span>
+  lit <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Int</span> <span style="color: #a0522d;">-&gt;</span> repr
+  neg <span style="color: #a0522d;">::</span> repr <span style="color: #a0522d;">-&gt;</span> repr
+  add <span style="color: #a0522d;">::</span> repr <span style="color: #a0522d;">-&gt;</span> repr <span style="color: #a0522d;">-&gt;</span> repr
+<span style="color: #a020f0;">instance</span> <span style="color: #228b22;">SymAdd</span> <span style="color: #228b22;">Int</span> <span style="color: #a020f0;">where</span>
+  lit <span style="color: #a0522d;">=</span> id
+  neg x <span style="color: #a0522d;">=</span> <span style="color: #a0522d;">-</span>x
+  add x y <span style="color: #a0522d;">=</span> x <span style="color: #a0522d;">+</span> y
+<span style="color: #a020f0;">instance</span> <span style="color: #228b22;">SymAdd</span> <span style="color: #228b22;">String</span> <span style="color: #a020f0;">where</span>
+  lit <span style="color: #a0522d;">=</span> show
+  neg x <span style="color: #a0522d;">=</span> <span style="color: #8b2252;">"(-"</span> <span style="color: #a0522d;">++</span> x <span style="color: #a0522d;">++</span> <span style="color: #8b2252;">")"</span>
+  add x y <span style="color: #a0522d;">=</span> <span style="color: #8b2252;">"("</span> <span style="color: #a0522d;">++</span> x <span style="color: #a0522d;">++</span> <span style="color: #8b2252;">"+"</span> <span style="color: #a0522d;">++</span> y <span style="color: #a0522d;">++</span> <span style="color: #8b2252;">")"</span>
+</code></pre>
+</div>
+
+</section>
+<section id="slide-orge6867d9">
+<h3 id="orge6867d9">Show <code>TFIntro.hs</code></h3>
+
+</section>
+<section id="slide-org48a8903">
+<h3 id="org48a8903">Move on to the interesting case</h3>
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">class</span> <span style="color: #228b22;">Symantics</span> repr <span style="color: #a020f0;">where</span>
+  v0  <span style="color: #a0522d;">::</span> repr (a, env) a
+  vs  <span style="color: #a0522d;">::</span> repr env a <span style="color: #a0522d;">-&gt;</span> repr (any, env) a
+  lam <span style="color: #a0522d;">::</span> repr (a, env) b <span style="color: #a0522d;">-&gt;</span> repr env (a <span style="color: #a0522d;">-&gt;</span> b)
+  app <span style="color: #a0522d;">::</span> repr env (a <span style="color: #a0522d;">-&gt;</span> b) <span style="color: #a0522d;">-&gt;</span> repr env a <span style="color: #a0522d;">-&gt;</span> repr env b
+
+  int <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Integer</span> <span style="color: #a0522d;">-&gt;</span> repr env <span style="color: #228b22;">Integer</span>
+  add <span style="color: #a0522d;">::</span> repr env <span style="color: #228b22;">Integer</span> <span style="color: #a0522d;">-&gt;</span> repr env <span style="color: #228b22;">Integer</span> <span style="color: #a0522d;">-&gt;</span> repr env <span style="color: #228b22;">Integer</span>
+</code></pre>
+</div>
+
+<p>
+(similar translation applied to the GADT datatype)
+</p>
+
+</section>
+<section id="slide-orgbe0aff1">
+<h3 id="orgbe0aff1">Exercise:</h3>
+<p>
+Simplify the typeclass definition so <code>repr</code> does not need to keep track of the type of the environment (hint: using HOAS) 
+</p>
+
+</section>
+<section id="slide-org203db73">
+<h3 id="org203db73">Connection between inital and final embedding</h3>
+<p>
+<b>Caveat</b>: "final" here is not in the sense of category theory!
+</p>
+
+<p>
+More discussion on this: <a href="https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in">link</a>
+</p>
+
+
+
+</section>
+</section>
+<section>
+<section id="slide-org1940a09">
+<h2 id="org1940a09">Discussion</h2>
+<div class="outline-text-2" id="text-org1940a09">
+</div>
+</section>
+<section id="slide-org8b0a5c9">
+<h3 id="org8b0a5c9">Extensibility ~ Modularity</h3>
+<p>
+Using constraints as (mini) modules <br />
+&#x2013; a common theme of haskell <code>mtl</code> library
+</p>
+
+</section>
+<section id="slide-org8b0a5c9-split">
+<p>
+incremental development:
+</p>
+<div class="org-src-container">
+
+<pre  class="src src-haskell"   ><code trim><span style="color: #a020f0;">class</span> <span style="color: #228b22;">Lang</span> a <span style="color: #a020f0;">where</span>
+  <span style="color: #a0522d;">...</span>
+<span style="color: #a020f0;">class</span> <span style="color: #228b22;">Ext1</span> a <span style="color: #a020f0;">where</span> <span style="color: #b22222;">-- </span><span style="color: #b22222;">Cons Car Cdr ...</span>
+<span style="color: #a020f0;">class</span> <span style="color: #228b22;">Ext2</span> a <span style="color: #a020f0;">where</span> <span style="color: #b22222;">-- </span><span style="color: #b22222;">String operations</span>
+
+<span style="color: #0000ff;">oldProg</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Lang</span> a <span style="color: #a0522d;">=&gt;</span> a
+<span style="color: #0000ff;">newProg</span> <span style="color: #a0522d;">::</span> <span style="color: #228b22;">Lang</span> a, <span style="color: #228b22;">Ext1</span> a, <span style="color: #228b22;">Ext2</span> a <span style="color: #a0522d;">=&gt;</span> a
+</code></pre>
+</div>
+
+<p>
+Q: What are the limitations of the final approach?
+</p>
+
+</section>
+<section id="slide-orga0e1191">
+<h3 id="orga0e1191">Compare with free monads</h3>
+<p>
+Free monads are still initial structure
+</p>
+
+<p>
+There is a way to combine these two and make a "final" free monads
+</p>
+
+</section>
+<section id="slide-org13aafe7">
+<h3 id="org13aafe7">Compare with Datatypes a la Carte</h3>
+<p>
+<code>data In f = In (f (In f))</code> this construction does not apply to 
+</p>
+
+</section>
+<section id="slide-org4914087">
+<h3 id="org4914087">Semantics</h3>
+<ul>
+<li>System F</li>
+<li>Yoneda?</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-org22bcaba">
+<h2 id="org22bcaba">References</h2>
+<p>
+Oleg's tutorial <a href="https://okmij.org/ftp/tagless-final/course/lecture.pdf">https://okmij.org/ftp/tagless-final/course/lecture.pdf</a>
+</p>
+
+<p>
+"Finally Tagless, Partially Evaluated"
+Jacques Carette, Oleg Kiselyov and Chung-chieh Shan
+<a href="https://okmij.org/ftp/tagless-final/JFP.pdf">https://okmij.org/ftp/tagless-final/JFP.pdf</a>
+</p>
+</section>
+</section>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/plugin/markdown/markdown.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/plugin/zoom/zoom.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js/plugin/notes/notes.js"></script>
+
+
+<script>
+// Full list of configuration options available here:
+// https://github.com/hakimel/reveal.js#configuration
+Reveal.initialize({
+plugins: [RevealMarkdown, RevealZoom, RevealNotes],
+slideNumber:true
+});
+
+</script>
+</body>
+</html>

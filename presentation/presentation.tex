@@ -1,0 +1,170 @@
+% Intended LaTeX compiler: pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\author{Zixiu Su}
+\date{2023-11-05}
+\title{Typed Tagless Final\\\medskip
+\large an approach to embedded DSLs}
+\hypersetup{
+ pdfauthor={Zixiu Su},
+ pdftitle={Typed Tagless Final},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 28.2 (Org mode 9.5.5)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+\setcounter{tocdepth}{1}
+\tableofcontents
+
+
+
+\section*{Intro}
+\label{sec:org0b54e77}
+\begin{NOTES}
+I was trying to implement a 311-style interpreter, this time in Haskell intead of Racket (which is untyped, or unityped). Very soon I found out there was a lot of hoops to jump through when it comes down to a typed language. I was not satisfied with my naive implementation and trying to improve my AST representation. Then I found Oleg's tutorial on so called "Typed Tagless Final" and learned some interesting techniques. And today I want to share with you what I learned.
+\end{NOTES}
+
+\subsection*{What do I mean by a "311-style interpreter"?}
+\label{sec:orgad59c7d}
+
+\subsubsection*{Some object/source language :}
+\label{sec:org92f5ef9}
+\begin{itemize}
+\item Simply typed lambda calculus (STLC)
+\item deBruijin indices
+\item extended with Bool/Int/\ldots{}
+\end{itemize}
+\subsubsection*{Implemented in:}
+\label{sec:org38d6920}
+Haskell (or other \textbf{TYPED} functional languages)
+
+\subsection*{Something like this?}
+\label{sec:org0f206ef}
+
+\begin{NOTES}
+(would be perfectly fine in Racket)
+\end{NOTES}
+
+\begin{verbatim}
+data Exp = ...
+
+interp (B b)     _   = b
+interp (V var)   env = lookp var env
+interp (L body)  env = \arg -> interp body (arg, env)
+interp (A f a)   env = (interp f env) (interp a env)
+\end{verbatim}
+
+
+\section*{My Naive Approach}
+\label{sec:org3ffa93b}
+
+\begin{NOTES}
+Unimportant differences:
+  Int vs Bool
+  named vs debruijned
+Important:
+  explain GADTs syntax (data Exp where..)
+  use Data.Map as env
+  union type for values
+\end{NOTES}
+
+\begin{verbatim}
+interp :: Exp -> Env -> Maybe Val
+
+type Env = M.Map String Val
+
+data Exp where
+  Int :: Integer -> Exp
+  Var :: String -> Exp
+  Lam :: String -> Exp -> Exp
+  App :: Exp -> Exp -> Exp
+
+data Val where
+  VInt  :: Integer -> Val
+  VClos :: String -> Exp -> Env -> Val
+\end{verbatim}
+
+\subsection*{Choosing types}
+\label{sec:orge970b6c}
+
+\begin{verbatim}
+interp :: Exp -> Env -> Val
+\end{verbatim}
+
+\begin{enumerate}
+\item Env <- Data.Map
+
+\item Define ADT
+\begin{verbatim}
+data Exp
+  = B Bool
+  | V Var
+  | L Exp
+  | A Exp Exp
+
+data Var = VS Var | V0
+\end{verbatim}
+
+\item Val needs a union of different types (tags)
+\begin{verbatim}
+data Val
+  = UB Bool
+  | UC (Val -> Val)
+\end{verbatim}
+\end{enumerate}
+
+\subsection*{Show result code here}
+\label{sec:org5253f52}
+
+\subsection*{Problems:}
+\label{sec:orga76e73b}
+\begin{enumerate}
+\item Boilerplate
+\item AST allowing ill-typed programs (example?)
+=> write a type checker?
+\item Packing/unpacking union type values
+\end{enumerate}
+
+Cause: DSL embedding is "loose" 
+
+\subsection*{Q: How would you improve the AST?}
+\label{sec:org0b48500}
+
+\section*{GADTs to the Rescue}
+\label{sec:org6e3214b}
+\begin{verbatim}
+{-# LANGUAGE GADTs #-}
+
+
+\end{verbatim}
+
+\section*{Tagless "Final"}
+\label{sec:orgc8b73c8}
+
+\section*{Discussion}
+\label{sec:org43335eb}
+
+\subsection*{Appendix}
+\label{sec:org62f163c}
+
+\subsubsection*{References}
+\label{sec:orgb3038eb}
+
+\subsubsection*{Categorical Semantics}
+\label{sec:org1742e3f}
+
+\subsubsection*{Comparison with free monads}
+\label{sec:org720c5a1}
+\end{document}

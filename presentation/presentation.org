@@ -1,0 +1,278 @@
+#+TITLE: Tagless Embeddings
+#+SUBTITLE: initial vs. final
+#+AUTHOR: Zixiu Su
+#+DATE: 2023-11-05
+
+:REVEAL_CONFIG:
+#+REVEAL_ROOT: https://cdn.jsdelivr.net/npm/reveal.js
+#+REVEAL_REVEAL_JS_VERSION: 4
+#+REVEAL_INIT_OPTIONS: slideNumber:true
+#+OPTIONS: timestamp:nil toc:1 num:nil 
+#+REVEAL_THEME: serif
+:END:
+
+:LATEX_CONFIG:
+#+LaTeX_CLASS: article
+:END:
+
+* Intro
+#+BEGIN_NOTES
+  I was trying to implement a 311-style interpreter, this time in Haskell intead of Racket (which is untyped, or unityped). Very soon I found out there was a lot of hoops to jump through when it comes down to a typed language. I was not satisfied with my naive implementation and trying to improve my AST representation. Then I found Oleg's tutorial on so called "Typed Tagless Final" and learned some interesting techniques. Todays I want to share with you what I learned.
+#+END_NOTES
+
+** What do I mean by a "311-style interpreter"?
+
+- Some object/source language :
+  + Simply typed lambda calculus (STLC)
+  + extended with Bool/Int/...
+
+- Implemented in:
+  
+  Haskell (or other *TYPED* functional languages)
+
+** Something looks like:
+#+BEGIN_NOTES
+  This would be a direct translation from the Racket version
+
+  Ask if this works? Take a guess?
+#+END_NOTES
+
+#+BEGIN_SRC haskell
+  data Var = VS Var | V0
+  data Exp = B Bool | V Var   | L Exp | A Exp Exp
+          -- boolean  variable  lambda  application
+  interp (B b)     _   = b
+  interp (V var)   env = lookp var env
+  interp (L body)  env = \arg -> interp body (arg, env)
+  interp (A f a)   env = (interp f env) (interp a env)
+#+END_SRC
+Does this work?
+
+* My Naive Approach
+
+#+BEGIN_NOTES
+Unimportant differences:
+
+- Int vs Bool
+
+- named vs debruijned
+
+Important:
+
+- explain GADTs syntax (data Exp where..)
+
+- use Data.Map as env
+
+- union type for values
+#+END_NOTES
+
+#+BEGIN_SRC haskell
+  interp :: Exp -> Env -> Maybe Val
+
+  type Env = M.Map String Val
+    
+  data Exp where
+    Int :: Integer -> Exp
+    Var :: String -> Exp
+    Lam :: String -> Exp -> Exp
+    App :: Exp -> Exp -> Exp
+
+  data Val where
+    VInt  :: Integer -> Val
+    VClos :: String -> Exp -> Env -> Val
+#+END_SRC
+
+** Choosing types                                                 :noexport:
+
+#+BEGIN_SRC haskell
+  interp :: Exp -> Env -> Val
+#+END_SRC
+
+1. Env <- Data.Map
+   
+2. Define ADT
+   #+BEGIN_SRC haskell
+     data Exp where
+       Int :: Integer -> Exp
+       Var :: String -> Exp
+       Lam :: String -> Exp -> Exp
+       App :: Exp -> Exp -> Exp
+   #+END_SRC
+
+3. Val needs a union of different types (tags)
+   #+BEGIN_SRC haskell
+     data Val where
+       VInt  :: Integer -> Val
+       VClos :: (Val -> Val) -> Val
+   #+END_SRC
+
+   
+** Show ~LC0.hs~
+
+** Problems:
+1. Boilerplate
+   
+2. AST allowing ill-typed programs (example?)
+   
+   => write a type checker?
+   
+3. Packing/unpacking union type values
+
+   Run-time overhead around *"tags"*
+   
+*Cause*: DSL embedding is "loose", Haskell type system can't help 
+
+** Q: How would you improve the AST?
+
+* GADTs to the Rescue
+
+*Main idea*: allow a type veriable to be specified by constructors
+
+Now ~Exp t~ defines a family of types, and ~eval~ can return different value types based on the type of ~t~
+#+BEGIN_SRC haskell
+  {-# LANGUAGE GADTs #-}
+  -- adding a extra parameter to achieve finer control
+  data Exp t where
+    int  :: Int  -> Exp Int  -- reflecting underlying value
+    bool :: Bool -> Exp Bool
+    lam :: (Exp a -> Exp b) -> Exp (a->b)
+    app :: Exp (a->b) -> Exp a -> Exp b
+    ...
+  
+  eval :: Exp t -> t -- returns different value types
+#+END_SRC
+*Caveat*: this is a simplified version!
+
+** Show real code
+
+** Nicely tagless! But do we have something simpler?
+
+* Tagless "Final"
+
+Main idea: using *typeclasses* instead of ADTs
+
+#+BEGIN_NOTES
+Explain the name:
+
+the previous ADT method is called "initial embedding", the concept related to initial algebra, that is each inductive type can be understood as an initial algebra of the underlying functor.
+
+"final" is not dual to "initial" in the common categroical sense, there is some duality, which I might talk about later.
+#+END_NOTES
+
+** First, let's look at a trivial example
+
+#+BEGIN_SRC haskell
+data Exp = Lit Int | Neg Exp | Add Exp Exp
+
+interp :: Exp -> Int
+interp (Lit x)   = x
+interp (Neg x)   = -(interp x)
+interp (Add x y) = interp x + interp y
+
+pprint :: Exp -> String
+pprint (Lit x)   = show x
+pprint (Neg x)   = "-(" ++ pprint x ++ ")"
+pprint (Add x y) = "(" ++ pprint x ++ "+" ++ pprint y ++ ")"
+
+-- You might also want these:
+-- parser    :: Exp -> String -> Maybe (String, Exp)
+-- eq        :: Exp -> Bool
+-- typeCheck :: Exp -> Either TypeError Exp
+#+END_SRC
+
+** Factoring out the common interface:
+~Exp -> X~, for some ~X~
+
+~X~ as an abstract type over concrete representations (Int,Bool,..)
+#+BEGIN_SRC haskell
+  data Exp = Lit Int | Neg Exp | Add Exp Exp
+  -- translates to  
+  class SymAdd repr where
+    lit :: Int -> repr
+    neg :: repr -> repr
+    add :: repr -> repr -> repr
+#+END_SRC
+
+** Evaluation/Pretty Print as *Instances*
+#+BEGIN_SRC haskell
+  class SymAdd repr where
+    lit :: Int -> repr
+    neg :: repr -> repr
+    add :: repr -> repr -> repr
+  instance SymAdd Int where
+    lit = id
+    neg x = -x
+    add x y = x + y
+  instance SymAdd String where
+    lit = show
+    neg x = "(-" ++ x ++ ")"
+    add x y = "(" ++ x ++ "+" ++ y ++ ")"
+#+END_SRC
+
+** Show ~TFIntro.hs~
+
+** Move on to the interesting case
+
+#+BEGIN_SRC haskell
+class Symantics repr where
+  v0  :: repr (a, env) a
+  vs  :: repr env a -> repr (any, env) a
+  lam :: repr (a, env) b -> repr env (a -> b)
+  app :: repr env (a -> b) -> repr env a -> repr env b
+  
+  int :: Integer -> repr env Integer
+  add :: repr env Integer -> repr env Integer -> repr env Integer
+#+END_SRC
+
+(similar translation applied to the GADT datatype)
+
+** Exercise:
+
+Simplify the typeclass definition so ~repr~ does not need to keep track of the type of the environment (hint: using HOAS) 
+
+** Connection between inital and final embedding
+*Caveat*: "final" here is not in the sense of category theory!
+
+More discussion on this: [[https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in][link]]
+
+
+
+* Discussion
+
+** Extensibility ~ Modularity
+Using constraints as (mini) modules \\
+-- a common theme of haskell ~mtl~ library
+
+#+REVEAL: split
+incremental development:
+#+BEGIN_SRC haskell
+  class Lang a where
+    ...
+  class Ext1 a where -- Cons Car Cdr ...
+  class Ext2 a where -- String operations
+
+  oldProg :: Lang a => a
+  newProg :: Lang a, Ext1 a, Ext2 a => a
+#+END_SRC
+
+Q: What are the limitations of the final approach?
+
+** Compare with free monads
+Free monads are still initial structure
+
+There is a way to combine these two and make a "final" free monads
+
+** Compare with Datatypes a la Carte
+~data In f = In (f (In f))~ this construction does not apply to 
+
+** Semantics
+- System F
+- Yoneda?
+
+* References
+
+Oleg's tutorial https://okmij.org/ftp/tagless-final/course/lecture.pdf
+
+"Finally Tagless, Partially Evaluated"
+Jacques Carette, Oleg Kiselyov and Chung-chieh Shan
+https://okmij.org/ftp/tagless-final/JFP.pdf
