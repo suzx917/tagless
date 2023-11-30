@@ -12,8 +12,9 @@ class Symantics repr where
   v0  :: repr (a, env) a
   vs  :: repr env a -> repr (any, env) a
   lam :: repr (a, env) b -> repr env (a -> b)
+  -- lam ::  (repr a -> repr b) -> repr (a -> b) -- using HOAS
   app :: repr env (a -> b) -> repr env a -> repr env b
-  
+
   int :: Integer -> repr env Integer
   add :: repr env Integer -> repr env Integer -> repr env Integer
 
@@ -26,8 +27,9 @@ prog1 = app (app (lam (lam (vs v0)))
                  (int 0))
             (int 1)
 
+prog2 :: Symantics repr => repr env (b -> b)
 prog2 = lam v0
-  
+
 newtype R env a = R { unR :: env -> a }
 
 instance Symantics R where
