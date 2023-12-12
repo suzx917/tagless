@@ -3,7 +3,7 @@
              StandaloneDeriving
 #-}
 
-module LC0 where
+module STLC.Naive where
 
 import Data.Map as M
 

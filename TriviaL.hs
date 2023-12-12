@@ -2,7 +2,7 @@
 {-# Language FlexibleInstances #-}
 {-# Language NoMonomorphismRestriction #-}
 
-module TFIntro where
+module TriviaL where
 
 {-
 -- Initial
@@ -18,10 +18,6 @@ pprint :: Exp -> String
 pprint (Lit x)   = show x
 pprint (Neg x)   = "-(" ++ pprint x ++ ")"
 pprint (Add x y) = "(" ++ pprint x ++ "+" ++ pprint y ++ ")"
-
--- You might also want these:
--- parser    :: Exp -> String -> Maybe (String, Exp)
--- eq        :: Exp -> Bool
 -- typeCheck :: Exp -> Either TypeError Exp
 
 {-
@@ -70,6 +66,6 @@ prog2 = mul (lit 3) prog0
 instance MulSym Int where
   mul = (*)
 
-instance MulSym String where
+instance MulSym String where 
   mul x y = "(" ++ x ++ "*" ++ y ++ ")"
 

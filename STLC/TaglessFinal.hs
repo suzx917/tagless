@@ -6,7 +6,7 @@
 --{-# LANGUAGE TypeSynonymInstances #-}
 --{-# LANGUAGE RankNTypes, KindSignatures, TypeFamilies #-}
 
-module STLC1 where
+module STLC.TaglessFinal where
 
 class Symantics repr where
   v0  :: repr (a, env) a

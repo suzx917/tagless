@@ -6,7 +6,7 @@
              StandaloneDeriving
 #-}
 
-module STLC0GADT where
+module STLC.GADT where
 
 import Data.Map as M
 
