@@ -2,6 +2,22 @@
 #+AUTHOR: Zixiu Su
 #+DATE: 2023-12-11
 
+#+options: toc:nil
+# better support of unicode and just in general
+#+latex_compiler: lualatex
+# better typography and fonts
+#+latex_header: \usepackage{fontspec}
+#+latex_header: \setmonofont[Scale=0.8]{Source Code Pro}
+#+latex_header: \setmainfont{Charter}
+#+latex_header: \setsansfont{IBM Plex Sans}
+#+latex_header: \usepackage{setspace} % Set line spacing
+#+latex_header: \setstretch{1}
+# no annoying link boxes
+#+latex_header: \usepackage[svgnames]{xcolor}
+#+latex_header: \hypersetup{colorlinks, urlcolor=MidnightBlue}
+# enable first paragraph indent
+#+latex_header: \usepackage{indentfirst}
+
 * Introduction
 
 As the final project for CSCI-P-424 Advanced Functional Programming class, this project is intended to study several techiniques to embed a *domain specific language* (DSL) into a typed host language (Haskell).
@@ -37,10 +53,8 @@ data Val where
 type Env = Map String Val
 #+END_src
 
-Since ~Map~ results are wrapped in ~Maybe~, we fix the type of the interpreter: ~interp :: Expr -> Env -> Maybe Val~.
-
 Some expressions evaluate to integer values and some closures,
-the two have to be unionized under ~Val~ because the interpreter can only return one result type. This introduces *tags* (the pconstructors, ~VInt~ and ~VClos~). Every time a value is used, it needs to be read off from ~Val~ by pattern matching, which brings boilerplate and run-time overhead.
+the two have to be unionized under ~Val~ because the interpreter can only return one result type. This introduces *tags* (the constructors, ~VInt~ and ~VClos~). Every time a value is used, it needs to be read off from ~Val~ by pattern matching, which brings boilerplate and run-time overhead.
 
 For example, in the case of the expression ~Add x y~:
 #+BEGIN_src haskell
@@ -59,15 +73,15 @@ And Kiselyov gives a solution to the issue using GADTs.
 
 As shown in ~STLC/GADT.hs~, the expressions and variables are defined as:
 #+BEGIN_src haskell
-data Var env t where
-  V0 :: Var (t, env) t
-  VS :: Var env      t -> Var (a, env) t
-
-data Exp env t where
-  B :: Bool                  -> Exp env Bool
-  V :: Var env      t        -> Exp env t
-  L :: Exp (a, env) b        -> Exp env (a -> b)
-  A :: Exp env      (a -> b) -> Exp env a        -> Exp env b
+  data Var env t where
+    V0 :: Var (t, env) t
+    VS :: Var env      t -> Var (a, env) t
+  
+  data Exp env t where
+    B :: Bool                  -> Exp env Bool
+    V :: Var env      t        -> Exp env t
+    L :: Exp (a, env) b        -> Exp env (a -> b)
+    A :: Exp env      (a -> b) -> Exp env a        -> Exp env b
 #+END_src
 
 Now the environments are represented by variable ~env~ in ~Exp~, and it's tuple type which serves as a heterogenous container, which exposes the type of values.
@@ -132,16 +146,10 @@ And implement each result type as a concrete ~repr~-esentation. For example, ~in
 #+END_SRC
 
 Programs now are "abstract" and up to concrete implementation. For example, we write 3+ (-4 + 5) as ~prog0 = add (lit 3) (add (neg (lit 4)) (lit 5))~, which is typed as ~prog0 :: SymAdd repr => repr~. Each instance of ~SymAdd~ can also be seens as a denotational semantics for the program.
-
-The benefits of doing this are:
-
-  1. There is no dispatch overhead on pattern matching of the expression. The abstract expression does the recursive calls automatically and combine their results, akin to a recursive schemes.
-
-  2. It's easier to achieve incremental development. Adding new terms is done by defining new typeclasses. Old programs will not be broken this way. New programs will contain more constraints in their type signatures. 
      
 ** STLC Using Tagless Final
 
-As in ~STLC/TaglessFinal.hs~, directly translating the expression definition using GADTs yields:
+As in ~STLC/TaglessFinal.hs~, directly translating the expression definition in ~STLC/GADT.hs~ yields:
 
 #+BEGIN_SRC haskell
   class Symantics repr where
@@ -169,4 +177,30 @@ instance Symantics R where
   add a b = R $ \xs -> (unR a) xs + (unR b) xs
 #+END_SRC
 
-Notice the ~R~ and ~unR~ will be erased at run-time because ~newtype~ uses the same run-time representation, so they are different from the *tags* mentioned earlier. 
+Notice the ~R~ and ~unR~ will be erased at run-time because the ~newtype~ wrapper does not change the same run-time representation, so they are different from the *tags* mentioned earlier. 
+
+Adopting a higher order abstract syntax (HOAS) would make the class definition even more simpler.
+
+The benefits of doing this are:
+
+  1. There is no dispatch overhead on pattern matching of the expression. The abstract expression does the recursive calls automatically and combine their results, akin to a recursive schemes.
+
+  2. It's easier to achieve incremental development. Adding new terms is done by defining new typeclasses. Old programs will not be broken this way. New programs will contain more constraints in their type signatures. 
+
+** 1# Register Machine
+
+In order to test the tagless final method on more samples, we attempted to implement Larry Moss's *1#*. The language is similar to Turing machines, for more details please see: https://iulg.sitehost.iu.edu/trm/.
+
+To give a simplified intuition, the register machine contains two parts: 1. Program: a list of instructions and a program counter which points to the current instruction; 2. Registers: a list of locations, each contains some textual data
+
+At each the machine carries out the current instruction until the program counter reaches the end of the program. The instructions define actions such as shifting the program counter, write symbols onto a particular register address, or parse the first symbol of some address and shift the program counter based on the result.
+
+The main discover from implementing 1# appeared when we tried to implement both instructions and machine states using typeclasses. Notice the machine's datatype is dependent on the instruction's because it contains instructions as data. And whenever a function is dependent on those abstract types as data, it is necessary to instantiate them into the inspectable "initial" representation (See ~OneSharp/ThreeSharp.sh~ line#98).
+
+It remains an open question if the instantiation to the initial datatype is avoidable. 
+
+** Typed Formatting for Parser and PrettyPrinter
+
+* Free Monad
+
+The project was intended to compare tagless final with free monad, but it turns out the two approaches are somewhat orthogonal. We might as well define the free monad as a typeclass and implement concrete interpretations as instances.
