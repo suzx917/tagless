@@ -68,8 +68,8 @@ print2 = sprintf fmt1 'w' 23
 newtype FSc a b = FSc ((String -> a) -> Maybe (b, String))
 -- no need to write the whole `Parser` type in `a` here because we can specify it in `sscanf`
 
-sscanf :: FSc (String -> Maybe (a, String)) b -> Maybe (b, String)
-sscanf 
+sscanf :: String -> FSc a b -> Maybe (a, String)
+sscanf str (Fsc format)
 
 instance FormatSpec FSc where
   lit str = FSc $ \k -> 

@@ -113,7 +113,7 @@ The use of typeclass is a common theme among Haskell libraries, (eg.: ~mtl~). In
 
 ** Motivating Example
 
-Starting from a simple example (see ~TriviaL.hs~),  The usual way is to define a recursive datatype ~Exp~ for the expressions, and then define the interpreter function by pattern matching. And, similarly, a pretty printer:
+Starting from implementing a simple first order language (see ~TriviaL.hs~),  we follow the usual approach defining a recursive datatype ~Exp~ for the expressions, and then define the interpreter function by pattern matching. And, similarly, a pretty printer:
 
 #+BEGIN_SRC haskell
   data Exp = Lit Int | Neg Exp | Add Exp Exp
@@ -129,7 +129,7 @@ Starting from a simple example (see ~TriviaL.hs~),  The usual way is to define a
   pprint (Add x y) = "(" ++ pprint x ++ "+" ++ pprint y ++ ")"
 #+END_src
 
-A family of functions can be implemented likewise, eg.: parser, type-checker, etc. Using Haskell typeclass feature, we can treat the result types of these functions abstractly, and factor out the common interface:
+A family of functions can be implemented likewise, eg.: parser, type-checker, etc. However, using Haskell typeclass feature, we can treat the result types of these functions abstractly, and factor out the common interface:
 
 #+BEGIN_SRC haskell
 class SymAdd repr where
@@ -215,22 +215,23 @@ As in ~FPP.hs~, tagless final is particularly suitable here for typing the forma
   fmt0 = lit "Hello " ^ char
 #+END_SRC
 
-The type ~repr a b~ can be understood as result type ~a~ is extended by ~b~. Components of the format template are concatenated by ~(^)~. A good exercise is to derive the type of ~fmt1 = char ^ int~ by hand, which will illustrate the unification of type variables.
+The type ~repr a b~ can be understood as result type ~a~ is extended by ~b~. Components of the format template are concatenated by ~(^)~. It is worth trying to derive the type of ~fmt1 = char ^ int~ by hand, which will illustrate the unification of type variables.
 
 #+BEGIN_SRC haskell
-  newtype FPr a b = FPr ((String -> a) -> b)
+    newtype FPr a b = FPr ((String -> a) -> b)
 
-  sprintf :: FPr String b -> b
-  sprintf (FPr format) = format id
+    sprintf :: FPr String b -> b
+    sprintf (FPr format) = format id
 
-  instance FormatSpec FPr where
-    lit str = FPr $ \k -> k str
-    int     = FPr $ \k x -> k (show x)
-    char    = FPr $ \k x -> k [x]
-    (FPr a) ^ (FPr b)  = FPr $ \k -> a (\sa -> b (\sb -> k (sa ++ sb)))
+    instance FormatSpec FPr where
+      lit str = FPr $ \k -> k str
+      int     = FPr $ \k x -> k (show x)
+      char    = FPr $ \k x -> k [x]
+      (FPr a) ^ (FPr b)  =
+        FPr $ \k -> a (\sa -> b (\sb -> k (sa ++ sb)))
 #+END_SRC
 
-The pretty printer representation is defind above as  ~FPr a b~. Observe its type is almost a CPS monad, but with two result types.
+The pretty printer representation is defind above as  ~FPr a b~. Observe its type is almost a CPS monad, but with two result types. The parser is defined dually, and it would be a great exercise fleshing it out using the hints given.
 
 ** Summary
 
@@ -248,10 +249,83 @@ Some directions to extend the current project:
 
   3. Study the semantics of tagless final and its polymorphism.
 
-* Free Monad
+* Free Monads
 
-The project was intended to compare tagless final with free monad, but it turns out the two approaches are somewhat orthogonal. A free monad is indeed an initial object, we might as well "finalize" it -- define the free monad as a typeclass and implement concrete interpretations as instances.
+The project was intended to compare tagless final with free monads, but it turns out the two approaches are somewhat orthogonal. A free monad is indeed an initial object, we might as well "finalize" it -- define the free monad as a typeclass and implement concrete interpretations as instances.
 
-Unfortunately due to time limit, the free monad approach could not be investigated properly even though it has a clear categorical semantics. Here we briefly report the "user experience" as we learn to implement simple programs with free monads. The calculator example follows Nikolay Yakimov's tutorial: https://serokell.io/blog/introduction-to-free-monads. And we expanded it to STLC, thanks to the help of Artem Yurchenko and his examples.
+Unfortunately due to time limit, the free monad approach could not be investigated properly, even though it has a clear categorical semantics. Here we briefly report the "user experience" as we learn to implement simple programs with free monads. The calculator example is modified from examples in Nikolay Yakimov's tutorial: https://serokell.io/blog/introduction-to-free-monads. And we expanded it to STLC, thanks to the help of Artem Yurchenko and his example project. All code related to free monads resides in ~FreeMonad.hs~.
+
+** Library Functions
+
+#+BEGIN_SRC haskell
+data Free f a = Pure a | Impure (f (Free f a))
+#+END_SRC
+
+The ~Free~ datatype lifts a functor ~f~ to its free monad. This provides a uniform construction for various of monads, eg. ~State~, ~List~, ~Writer~, etc., from their underlying functor, without writing each of their applicative and monad instances. Instead we only need to define the instances on ~Free f~, and then write an interpreter to do actual computation, eg:
+
+#+BEGIN_SRC haskell
+  type State s a = s -> (a, s) -- `(State s)` is a functor on `a`
+  runState :: Free (State s) a -> State s a
+  runState (Pure a) = \s -> (a, s)
+  runState (Impure fm) = \s -> let (m, s') = g s in runState m s'
+#+END_SRC
+
+To interpret a free monad to other monads, we have the ~foldFree~ function, which is essentially a catamorphism:
+
+#+BEGIN_SRC haskell
+  foldFree :: (Functor f, Monad m) =>
+              (forall x. f x -> m x) -> Free f a -> m a
+  foldFree _   (Pure a) = return a
+  foldFree phi (Impure ffa) =
+    join $ phi (fmap (foldFree phi) ffa)
+#+END_SRC
 
 ** A Calculator
+
+Similar to the trivial first order language before, our calculator DSL only has integers, addition, and I/O. The underlying functor is defined as: (note the continuations ~(X -> r)~ presumably can be eliminated using *freer monads*)
+
+#+BEGIN_SRC haskell
+data CalF t r where
+  Lit    :: Int -> (Int -> r) -> CalF t r
+  Plus   :: Int -> Int -> (Int -> r) -> CalF t r
+  Input  :: (t -> r) -> CalF t r
+  Output :: t -> (() -> r) -> CalF t r
+#+END_SRC
+
+Then we define the following term constructors, this boilerplate should be automated using ~makeFree~ in the Haskell library: https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free-TH.html.
+
+#+BEGIN_SRC haskell
+  lit :: Int -> Cal Int Int
+  lit x = liftF $ Lit x id
+
+  plus :: Int -> Int -> Cal Int Int
+  plus x y = liftF $ Plus x y id
+
+  input :: Cal t t
+  input = liftF $ Input id
+
+  output :: t -> Cal t ()
+  output x = liftF $ Output x id
+
+  prog1 :: Cal Int ()
+  prog1 = do
+    a <- lit (-1)
+    x <- input
+    r <- plus x a
+    output r
+#+END_SRC
+
+The program now is constructed in a monadic style, which provides some syntactic convenience. However, this forces the programmer to choose the evaluation order and linearize the expression AST. But sometimes we want to have access to the tree representation, eg. pretty printing.
+
+#+BEGIN_SRC haskell
+calculateF :: CalF Int x -> IO x
+calculateF (Lit x k)    = return $ k x
+calculateF (Plus x y k) = return $ k (x + y)
+calculateF (Input k)    = do { x <- read <$> getLine ; return $ k x }
+calculateF (Output x k) = do { print x ; return $ k ()  }
+
+calculate :: Cal Int x -> IO x
+calculate = foldFree calculateF
+#+END_SRC
+
+The interpreter is written as above. Our STLC is implemented likewise, we omit the code here since it's not noteworthy.
