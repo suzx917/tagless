@@ -1,0 +1,172 @@
+#+TITLE: Embedded Domain Specific Language Study - Tagless Final
+#+AUTHOR: Zixiu Su
+#+DATE: 2023-12-11
+
+* Introduction
+
+As the final project for CSCI-P-424 Advanced Functional Programming class, this project is intended to study several techiniques to embed a *domain specific language* (DSL) into a typed host language (Haskell).
+
+The main DSLs we choose are: (1) a simple, first order language with only integer addition and negation; (2) a simply typed lambda calculus extended with integers. Our main goal is to study *tagless final*, and then compare it with other methods such as *free monad* and *GADTs*.
+
+The methods are not exclusive -- often, we can combine them. This study is only preliminary and empirical. But further investigation will be discussed.
+
+For the most part, the project follows Oleg Kiselyov's tutorial on tagless final: https://okmij.org/ftp/tagless-final/index.html.
+
+
+* Naive Implementation of STLC in Haskell
+
+As in ~STLC/Naive.hs~, this approach mimics the CEK style interpreter in B521 Programming Languages Principle. But tranlation into a typed context complicates the situation.
+
+The expressions of the language are defined as a datatype: 
+#+BEGIN_SRC haskell
+  data Expr where
+    Int :: Integer -> Expr
+    Add :: Expr -> Expr -> Expr
+    Var :: String -> Expr
+    Lam :: String -> Expr -> Expr
+    App :: Expr -> Expr -> Expr
+#+END_SRC
+
+The interpreter is attempted to be of type: ~Expr -> Env -> Val~, so we define environment and value type as:
+
+#+BEGIN_src haskell
+data Val where
+  VInt  :: Integer -> Val
+  VClos :: String -> Expr -> Env -> Val
+
+type Env = Map String Val
+#+END_src
+
+Since ~Map~ results are wrapped in ~Maybe~, we fix the type of the interpreter: ~interp :: Expr -> Env -> Maybe Val~.
+
+Some expressions evaluate to integer values and some closures,
+the two have to be unionized under ~Val~ because the interpreter can only return one result type. This introduces *tags* (the pconstructors, ~VInt~ and ~VClos~). Every time a value is used, it needs to be read off from ~Val~ by pattern matching, which brings boilerplate and run-time overhead.
+
+For example, in the case of the expression ~Add x y~:
+#+BEGIN_src haskell
+interp (Add x y) env  = do
+  xval <- interp x env
+  yval <- interp y env
+  xint <- unpack xval
+  yint <- unpack yval
+  return $ VInt (xint + yint)
+#+END_src
+
+Apparently, this is not an efficient way to embed STLC. The type does not contain enough information to describe the actual values.
+And Kiselyov gives a solution to the issue using GADTs.
+
+* GADTs Provide "Tight" Embedding
+
+As shown in ~STLC/GADT.hs~, the expressions and variables are defined as:
+#+BEGIN_src haskell
+data Var env t where
+  V0 :: Var (t, env) t
+  VS :: Var env      t -> Var (a, env) t
+
+data Exp env t where
+  B :: Bool                  -> Exp env Bool
+  V :: Var env      t        -> Exp env t
+  L :: Exp (a, env) b        -> Exp env (a -> b)
+  A :: Exp env      (a -> b) -> Exp env a        -> Exp env b
+#+END_src
+
+Now the environments are represented by variable ~env~ in ~Exp~, and it's tuple type which serves as a heterogenous container, which exposes the type of values.
+
+Also, the type of the value of an expression is exposed by ~t~, which allows the intepreter to return a (ad-hoc) polymorphic result:
+
+#+BEGIN_src haskell
+  interp :: Exp env t -> env -> t
+  interp (B b)    _   = b
+  interp (V var)  env = lookp var env
+  interp (L body) env = \arg -> interp body (arg, env)
+  interp (A f a)  env = (interp f env) (interp a env)
+
+  lookp :: Var env t -> env -> t
+  lookp (VS v) (_, xs) = lookp v xs
+  lookp V0     (x, _)  = x
+#+END_src
+
+This eliminates the "tags" in the union value type in the previous approach.
+
+* Tagless Final
+
+Another way to achieve "tagless" is called tagless final. The duality is not so clear to the author in the formal, categorical sense. Some discussion can be found here: https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in.
+
+** Motivating Example
+
+Starting from a simple example (see ~TriviaL.hs~), suppose we are implementing DSL (1). The usual way is to define a recursive datatype ~Exp~ for the expressions, and then define the interpreter function by pattern matching. And, similarly, a pretty printer:
+
+#+BEGIN_SRC haskell
+  data Exp = Lit Int | Neg Exp | Add Exp Exp
+
+  interp :: Exp -> Int
+  interp (Lit x)   = x
+  interp (Neg x)   = -(interp x)
+  interp (Add x y) = interp x + interp y
+
+  pprint :: Exp -> String 
+  pprint (Lit x)   = show x
+  pprint (Neg x)   = "-(" ++ pprint x ++ ")"
+  pprint (Add x y) = "(" ++ pprint x ++ "+" ++ pprint y ++ ")"
+#+END_src
+
+A family of functions can be implemented likewise, eg.: parser, type-checker, etc. Using Haskell typeclass feature, we can treat the result types of these functions abstractly, and factor out the common interface:
+
+#+BEGIN_SRC haskell
+class SymAdd repr where
+  lit :: Int -> repr
+  neg :: repr -> repr
+  add :: repr -> repr -> repr
+#+END_SRC
+
+And implement each result type as a concrete ~repr~-esentation. For example, ~interp :: Exp -> Int~ becomes: (note ~eval~ only serves to choose the concrete representation/result type)
+ 
+#+BEGIN_SRC haskell
+  instance SymAdd Int where
+    lit = id
+    neg x = -x
+    add x y = x + y
+
+  eval :: Int -> Int
+  eval = id
+#+END_SRC
+
+Programs now are "abstract" and up to concrete implementation. For example, we write 3+ (-4 + 5) as ~prog0 = add (lit 3) (add (neg (lit 4)) (lit 5))~, which is typed as ~prog0 :: SymAdd repr => repr~. Each instance of ~SymAdd~ can also be seens as a denotational semantics for the program.
+
+The benefits of doing this are:
+
+  1. There is no dispatch overhead on pattern matching of the expression. The abstract expression does the recursive calls automatically and combine their results, akin to a recursive schemes.
+
+  2. It's easier to achieve incremental development. Adding new terms is done by defining new typeclasses. Old programs will not be broken this way. New programs will contain more constraints in their type signatures. 
+     
+** STLC Using Tagless Final
+
+As in ~STLC/TaglessFinal.hs~, directly translating the expression definition using GADTs yields:
+
+#+BEGIN_SRC haskell
+  class Symantics repr where
+    v0  :: repr (a, env) a
+    vs  :: repr env a -> repr (any, env) a
+    lam :: repr (a, env) b -> repr env (a -> b)
+    app :: repr env (a -> b) -> repr env a -> repr env b
+  
+    int :: Integer -> repr env Integer
+    add :: repr env Integer -> repr env Integer -> repr env Integer
+#+END_SRC
+
+For evaluation, we define the result type ~R~ using ~newtype~ and implement it as:
+#+BEGIN_SRC haskell
+newtype R env a = R { unR :: env -> a }
+
+instance Symantics R where
+  v0   = R $ \(x, xs) -> x
+  vs v = R $ \(_, xs) -> (unR v) xs
+  
+  lam body = R $ \xs -> \x -> (unR body) (x , xs)
+  app f g  = R $ \xs -> (unR f) xs $ (unR g) xs
+
+  int n   = R $ \xs -> n
+  add a b = R $ \xs -> (unR a) xs + (unR b) xs
+#+END_SRC
+
+Notice the ~R~ and ~unR~ will be erased at run-time because ~newtype~ uses the same run-time representation, so they are different from the *tags* mentioned earlier. 
