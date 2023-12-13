@@ -55,7 +55,7 @@ instance FormatSpec FPr where
     int     = FPr $ \k x -> k (show x)
     char    = FPr $ \k x -> k [x]
     fpp (PrinterParser pr _) = FPr $ \k x -> k (pr x)
-    -- moandic bind???
+    -- monadic bind???
     (FPr a) ^ (FPr b)  = FPr $ \k -> a (\sa -> b (\sb -> k (sa ++ sb)))
 
 ex0 = sprintf fmt1

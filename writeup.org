@@ -1,6 +1,6 @@
-#+TITLE: Embedded Domain Specific Language Study - Tagless Final
+#+TITLE: Embedded Domain Specific Language Study -- Tagless Final
 #+AUTHOR: Zixiu Su
-#+DATE: 2023-12-11
+#+DATE: 2023-12-12
 
 #+options: toc:nil
 # better support of unicode and just in general
@@ -20,9 +20,9 @@
 
 * Introduction
 
-As the final project for CSCI-P-424 Advanced Functional Programming class, this project is intended to study several techiniques to embed a *domain specific language* (DSL) into a typed host language (Haskell).
+As the final project for CSCI-P-424 Advanced Functional Programming class, this project is intended to study several techiniques to embed a *domain specific language* (DSL) into a typed host language (*Haskell*).
 
-The main DSLs we choose are: (1) a simple, first order language with only integer addition and negation; (2) a simply typed lambda calculus extended with integers. Our main goal is to study *tagless final*, and then compare it with other methods such as *free monad* and *GADTs*.
+The main DSLs we choose are is a simply typed lambda calculus extended with integers. Our main goal is to study *tagless final*, and then compare it with other methods such as *free monad* and *GADTs*.
 
 The methods are not exclusive -- often, we can combine them. This study is only preliminary and empirical. But further investigation will be discussed.
 
@@ -31,7 +31,7 @@ For the most part, the project follows Oleg Kiselyov's tutorial on tagless final
 
 * Naive Implementation of STLC in Haskell
 
-As in ~STLC/Naive.hs~, this approach mimics the CEK style interpreter in B521 Programming Languages Principle. But tranlation into a typed context complicates the situation.
+As in ~STLC/Naive.hs~, this approach mimics the CEK style interpreter taught in B521 Programming Languages Principle. But translation into a typed context complicates the situation.
 
 The expressions of the language are defined as a datatype: 
 #+BEGIN_SRC haskell
@@ -58,12 +58,15 @@ the two have to be unionized under ~Val~ because the interpreter can only return
 
 For example, in the case of the expression ~Add x y~:
 #+BEGIN_src haskell
-interp (Add x y) env  = do
-  xval <- interp x env
-  yval <- interp y env
-  xint <- unpack xval
-  yint <- unpack yval
-  return $ VInt (xint + yint)
+  interp (Add x y) env  = do
+    xval <- interp x env
+    yval <- interp y env
+    xint <- unpack xval
+    yint <- unpack yval
+    return $ VInt (xint + yint)
+    
+  unpack (VInt n) = Just n
+  unpack x        = error $ show x ++ " is not VInt"
 #+END_src
 
 Apparently, this is not an efficient way to embed STLC. The type does not contain enough information to describe the actual values.
@@ -104,11 +107,13 @@ This eliminates the "tags" in the union value type in the previous approach.
 
 * Tagless Final
 
-Another way to achieve "tagless" is called tagless final. The duality is not so clear to the author in the formal, categorical sense. Some discussion can be found here: https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in.
+Another way to achieve "tagless" is called tagless final. The duality is not so clear to the author in the formal, categorical sense. Some discussion can be found here: https://cstheory.stackexchange.com/questions/45565/what-category-are-tagless-final-algebras-final-in. The categorical semantics of tagless final requires further investigation, it might be related to CPS and Yoneda lemma.
+
+The use of typeclass is a common theme among Haskell libraries, (eg.: ~mtl~). In object-oriented programming, there is the similar concept of dependency injection. What justifies tagless final as a distinct concept seems also depends on the question in the previous paragraph.
 
 ** Motivating Example
 
-Starting from a simple example (see ~TriviaL.hs~), suppose we are implementing DSL (1). The usual way is to define a recursive datatype ~Exp~ for the expressions, and then define the interpreter function by pattern matching. And, similarly, a pretty printer:
+Starting from a simple example (see ~TriviaL.hs~),  The usual way is to define a recursive datatype ~Exp~ for the expressions, and then define the interpreter function by pattern matching. And, similarly, a pretty printer:
 
 #+BEGIN_SRC haskell
   data Exp = Lit Int | Neg Exp | Add Exp Exp
@@ -133,7 +138,7 @@ class SymAdd repr where
   add :: repr -> repr -> repr
 #+END_SRC
 
-And implement each result type as a concrete ~repr~-esentation. For example, ~interp :: Exp -> Int~ becomes: (note ~eval~ only serves to choose the concrete representation/result type)
+And implement each result type (~Int~ for ~interp~, ~String~ for ~pprint~, etc.)  as a concrete ~repr~-esentation. For example, ~interp :: Exp -> Int~ becomes: (note ~eval~ only serves to choose the concrete representation/result type)
  
 #+BEGIN_SRC haskell
   instance SymAdd Int where
@@ -181,26 +186,72 @@ Notice the ~R~ and ~unR~ will be erased at run-time because the ~newtype~ wrappe
 
 Adopting a higher order abstract syntax (HOAS) would make the class definition even more simpler.
 
-The benefits of doing this are:
-
-  1. There is no dispatch overhead on pattern matching of the expression. The abstract expression does the recursive calls automatically and combine their results, akin to a recursive schemes.
-
-  2. It's easier to achieve incremental development. Adding new terms is done by defining new typeclasses. Old programs will not be broken this way. New programs will contain more constraints in their type signatures. 
-
 ** 1# Register Machine
 
-In order to test the tagless final method on more samples, we attempted to implement Larry Moss's *1#*. The language is similar to Turing machines, for more details please see: https://iulg.sitehost.iu.edu/trm/.
+In order to test the tagless final method on more samples, we attempted to implement Larry Moss's *1#* register machine. Which is similar to Turing machines, for more details please see: https://iulg.sitehost.iu.edu/trm/.
 
 To give a simplified intuition, the register machine contains two parts: 1. Program: a list of instructions and a program counter which points to the current instruction; 2. Registers: a list of locations, each contains some textual data
 
-At each the machine carries out the current instruction until the program counter reaches the end of the program. The instructions define actions such as shifting the program counter, write symbols onto a particular register address, or parse the first symbol of some address and shift the program counter based on the result.
+At each step, the machine carries out the current instruction until the program counter reaches the end of the program. The instructions define actions such as: 1. shifting the program counter, 2. write symbols onto a particular register address, or 3. parse the first symbol of some address and shift the program counter based on the result.
 
 The main discover from implementing 1# appeared when we tried to implement both instructions and machine states using typeclasses. Notice the machine's datatype is dependent on the instruction's because it contains instructions as data. And whenever a function is dependent on those abstract types as data, it is necessary to instantiate them into the inspectable "initial" representation (See ~OneSharp/ThreeSharp.sh~ line#98).
 
 It remains an open question if the instantiation to the initial datatype is avoidable. 
 
-** Typed Formatting for Parser and PrettyPrinter
+** Typed Formatting
+
+A template string with typed holes can be used both for pretty printing and parsing. For example, ~sprintf~ and ~sscanf~ in *C*. The duality is an interesting topic in bidirectional transformation.
+
+As in ~FPP.hs~, tagless final is particularly suitable here for typing the format template abstractly. Here are the typeclass definition and an example format with the inferred type:
+
+#+BEGIN_SRC haskell
+  class FormatSpec repr where
+    lit  :: String -> repr a a
+    int  :: repr a (Int -> a)
+    char :: repr a (Char -> a)
+    (^)  :: repr b c -> repr a b -> repr a c
+
+  -- fmt0 :: FormatSpec repr => repr a (Char -> a)
+  fmt0 = lit "Hello " ^ char
+#+END_SRC
+
+The type ~repr a b~ can be understood as result type ~a~ is extended by ~b~. Components of the format template are concatenated by ~(^)~. A good exercise is to derive the type of ~fmt1 = char ^ int~ by hand, which will illustrate the unification of type variables.
+
+#+BEGIN_SRC haskell
+  newtype FPr a b = FPr ((String -> a) -> b)
+
+  sprintf :: FPr String b -> b
+  sprintf (FPr format) = format id
+
+  instance FormatSpec FPr where
+    lit str = FPr $ \k -> k str
+    int     = FPr $ \k x -> k (show x)
+    char    = FPr $ \k x -> k [x]
+    (FPr a) ^ (FPr b)  = FPr $ \k -> a (\sa -> b (\sb -> k (sa ++ sb)))
+#+END_SRC
+
+The pretty printer representation is defind above as  ~FPr a b~. Observe its type is almost a CPS monad, but with two result types.
+
+** Summary
+
+The benefits of adopting tagless final are:
+
+  1. There is no dispatch overhead on pattern matching of the expression. The abstract expression does the recursive calls automatically and combine their results, akin to a recursive schemes. Which brings performance improvements.
+
+  2. It is easier to achieve incremental development, compared to adding cases in the AST datatype and modifying each function mapping out from that datatype. Adding new terms is done by defining new typeclasses. Old programs will not be broken this way. New programs will contain more constraints in their type signatures. And presumably there is no need to recompile previous code (need to verify).
+
+Some directions to extend the current project:
+
+  1. Extend STLC with ~callCC~.
+
+  2. Solve the problem posed by *1#* (avoid using initial datatypes).
+
+  3. Study the semantics of tagless final and its polymorphism.
 
 * Free Monad
 
-The project was intended to compare tagless final with free monad, but it turns out the two approaches are somewhat orthogonal. We might as well define the free monad as a typeclass and implement concrete interpretations as instances.
+The project was intended to compare tagless final with free monad, but it turns out the two approaches are somewhat orthogonal. A free monad is indeed an initial object, we might as well "finalize" it -- define the free monad as a typeclass and implement concrete interpretations as instances.
+
+Unfortunately due to time limit, the free monad approach could not be investigated properly even though it has a clear categorical semantics. Here we briefly report the "user experience" as we learn to implement simple programs with free monads. The calculator example follows Nikolay Yakimov's tutorial: https://serokell.io/blog/introduction-to-free-monads. And we expanded it to STLC, thanks to the help of Artem Yurchenko and his examples.
+
+** A Calculator
