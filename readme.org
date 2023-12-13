@@ -200,7 +200,7 @@ It remains an open question if the instantiation to the initial datatype is avoi
 
 ** Typed Formatting
 
-A template string with typed holes can be used both for pretty printing and parsing. For example, ~sprintf~ and ~sscanf~ in *C*. The duality is an interesting topic in bidirectional transformation.
+A formate template with typed holes can be used both for pretty printing and parsing. For example, ~sprintf~ and ~sscanf~ in *C*. The duality is also an interesting topic in bidirectional transformation.
 
 As in ~FPP.hs~, tagless final is particularly suitable here for typing the format template abstractly. Here are the typeclass definition and an example format with the inferred type:
 
@@ -218,20 +218,20 @@ As in ~FPP.hs~, tagless final is particularly suitable here for typing the forma
 The type ~repr a b~ can be understood as result type ~a~ is extended by ~b~. Components of the format template are concatenated by ~(^)~. It is worth trying to derive the type of ~fmt1 = char ^ int~ by hand, which will illustrate the unification of type variables.
 
 #+BEGIN_SRC haskell
-    newtype FPr a b = FPr ((String -> a) -> b)
+  newtype FPr a b = FPr ((String -> a) -> b)
 
-    sprintf :: FPr String b -> b
-    sprintf (FPr format) = format id
+  sprintf :: FPr String b -> b
+  sprintf (FPr format) = format id
 
-    instance FormatSpec FPr where
-      lit str = FPr $ \k -> k str
-      int     = FPr $ \k x -> k (show x)
-      char    = FPr $ \k x -> k [x]
-      (FPr a) ^ (FPr b)  =
-        FPr $ \k -> a (\sa -> b (\sb -> k (sa ++ sb)))
+  instance FormatSpec FPr where
+    lit str = FPr $ \k -> k str
+    int     = FPr $ \k x -> k (show x)
+    char    = FPr $ \k x -> k [x]
+    (FPr a) ^ (FPr b)  =
+      FPr $ \k -> a (\sa -> b (\sb -> k (sa ++ sb)))
 #+END_SRC
 
-The pretty printer representation is defind above as  ~FPr a b~. Observe its type is almost a CPS monad, but with two result types. The parser is defined dually, and it would be a great exercise fleshing it out using the hints given.
+The pretty printer representation is defind above as ~FPr a b~. Observe its type is almost a CPS monad, but with two result types. The parser is defined dually, and it would be a great exercise fleshing it out using the hints given.
 
 ** Summary
 
@@ -270,7 +270,7 @@ The ~Free~ datatype lifts a functor ~f~ to its free monad. This provides a unifo
   runState (Impure fm) = \s -> let (m, s') = g s in runState m s'
 #+END_SRC
 
-To interpret a free monad to other monads, we have the ~foldFree~ function, which is essentially a catamorphism:
+To interpret a free monad to other monads, we have the ~foldFree~ function, which is essentially lifts an one-step functor evaluation to a recursive free monad evaluation:
 
 #+BEGIN_SRC haskell
   foldFree :: (Functor f, Monad m) =>
@@ -282,7 +282,7 @@ To interpret a free monad to other monads, we have the ~foldFree~ function, whic
 
 ** A Calculator
 
-Similar to the trivial first order language before, our calculator DSL only has integers, addition, and I/O. The underlying functor is defined as: (note the continuations ~(X -> r)~ presumably can be eliminated using *freer monads*)
+Similar to the trivial first order language before, the calculator DSL only has integers, addition, and I/O. The underlying functor is defined as: (note the continuations ~(X -> r)~ presumably can be eliminated using *freer monads*)
 
 #+BEGIN_SRC haskell
 data CalF t r where
@@ -292,7 +292,7 @@ data CalF t r where
   Output :: t -> (() -> r) -> CalF t r
 #+END_SRC
 
-Then we define the following term constructors, this boilerplate should be automated using ~makeFree~ in the Haskell library: https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free-TH.html.
+Then the following term constructors are defined. This boilerplate should be automated using ~makeFree~ in the Haskell library: https://hackage.haskell.org/package/free-5.2/docs/Control-Monad-Free-TH.html.
 
 #+BEGIN_SRC haskell
   lit :: Int -> Cal Int Int
@@ -315,7 +315,9 @@ Then we define the following term constructors, this boilerplate should be autom
     output r
 #+END_SRC
 
-The program now is constructed in a monadic style, which provides some syntactic convenience. However, this forces the programmer to choose the evaluation order and linearize the expression AST. But sometimes we want to have access to the tree representation, eg. pretty printing.
+The program now is constructed in a monadic style, which provides some syntactic convenience. However, this forces the programmer to choose the evaluation order and linearize the expression AST. But sometimes we want to have access to the tree representation, eg. pretty printing. This might be a separate concern.
+
+We can modify the underlying functor to make it possible, by replacing all ~t~'s with ~Cal t t~'s in ~CalF~ definition (subtrees become free monads instead of unlifted values, analogous to the LC example at line#176). This mutual recursion complicates the evaluation because the recursive function has to be called on subtrees when defining the one step evaluation (see line#229).
 
 #+BEGIN_SRC haskell
 calculateF :: CalF Int x -> IO x
@@ -328,4 +330,12 @@ calculate :: Cal Int x -> IO x
 calculate = foldFree calculateF
 #+END_SRC
 
-The interpreter is written as above. Our STLC is implemented likewise, we omit the code here since it's not noteworthy.
+The interpreter is written as above. Our STLC is implemented likewise, we omit the code here since it's not noteworthy. The main question here is whether to use the monadic program format to replace a tree like
+
+A few things to work on further:
+
+  1. Use freer monads
+     
+  2. Discuss the relation between algebras and monads
+
+  3. Investigate the efficiency issue of using free monads
