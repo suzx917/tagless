@@ -2,6 +2,8 @@
 -- https://okmij.org/ftp/tagless-final/course/PrintScanF.hs
 
 {-# LANGUAGE NoMonomorphismRestriction #-}
+--{-# LANGUAGE StandaloneDeriving        #-}
+--{-# LANGUAGE DeriveFunctor             #-}
 
 module FPP where
 
@@ -34,7 +36,7 @@ fmt _ = fpp showread
 showread :: (Show a, Read a) => PrinterParser a
 showread =
   PrinterParser show $
-    \str -> case read str of
+    \str -> case reads str of
       [(a, str')] -> Just (a, str')
       _ -> Nothing
 
@@ -47,7 +49,7 @@ newtype FPr a b = FPr ((String -> a) -> b)
 
 sprintf :: FPr String b -> b
 sprintf (FPr format) = format id
--- here we use unify result type `a` with String
+-- here we unify result type `a` with String
 
 instance FormatSpec FPr where
     lit str = FPr $ \k -> k str
@@ -65,12 +67,40 @@ print2 = sprintf fmt1 'w' 23
 
 
 -- Parser
-newtype FSc a b = FSc ((String -> a) -> Maybe (b, String))
+newtype FSc a b = FSc (String -> b -> Maybe (a, String))
 -- no need to write the whole `Parser` type in `a` here because we can specify it in `sscanf`
 
-sscanf :: String -> FSc a b -> Maybe (a, String)
-sscanf str (Fsc format)
+-- it's just unFSc
+sscanf :: FSc a b -> String -> b -> Maybe (a, String)
+sscanf (FSc format) str k = format str k 
+
+removePrefix :: String -> String -> Maybe String
+removePrefix long [] = Just long
+removePrefix []   _  = Nothing
+removePrefix (x:xs) (y:ys)
+ | x == y    = removePrefix xs ys
+ | otherwise = Nothing
 
 instance FormatSpec FSc where
-  lit str = FSc $ \k -> 
+  lit str = FSc $ \inp k ->
+    case removePrefix inp str of
+      Just suffix -> Just (k, suffix)
+      Nothing -> Nothing
+  char = FSc $ \inp k ->
+    case inp of
+      (x : xs) -> Just (k x, xs)
+      _        -> Nothing
+  fpp (PrinterParser _ par) = FSc $ \inp k ->
+    case par inp of
+      Just (b, inp') -> Just (k b, inp')
+      Nothing        -> Nothing
+  int = fpp showread
+  (FSc pl) ^ (FSc pr) = FSc $ \inp k ->
+    case pl inp k of
+      Just (k', inp') -> pr inp' k'
+      _               -> Nothing
 
+-- try "Hello 1a" would throw error
+--fmt0 = lit "Hello " ^ char
+str1 = "Hello a1"
+parse1 = sscanf fmt1 str1 (,)
