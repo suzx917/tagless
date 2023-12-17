@@ -67,8 +67,9 @@ print2 = sprintf fmt1 'w' 23
 
 
 -- Parser
+
+-- Note: implemented myself given the pprinter example
 newtype FSc a b = FSc (String -> b -> Maybe (a, String))
--- no need to write the whole `Parser` type in `a` here because we can specify it in `sscanf`
 
 -- it's just unFSc
 sscanf :: FSc a b -> String -> b -> Maybe (a, String)
